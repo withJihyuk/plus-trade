@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 from typing import Any
 
@@ -77,18 +77,36 @@ class BarRepository:
         return bars.reset_index(drop=True)
 
 
+class BarImporter:
+    def __init__(self, repository: BarRepository) -> None:
+        self.repository = repository
+
+    def import_file(self, path: Path, *, symbol: str, file_format: str | None = None) -> Path:
+        format_name = (file_format or path.suffix.lstrip(".")).lower()
+        if format_name == "csv":
+            bars = pd.read_csv(path)
+        elif format_name in {"parquet", "pq"}:
+            bars = pd.read_parquet(path)
+        else:
+            raise ValueError("bar import format must be csv or parquet")
+
+        bars = normalize_bars(bars)
+        bars["symbol"] = symbol.upper()
+        return self.repository.write_bars(symbol.upper(), bars, Timeframe.ONE_MINUTE)
+
+
 class KisChartIngestor:
     def __init__(self, kis: Any, repository: BarRepository) -> None:
         self.kis = kis
         self.repository = repository
 
-    def ingest_symbol(self, symbol: str, *, start: date, end: date) -> Path:
+    def ingest_symbol(self, symbol: str, *, start_time: time | None = None, end_time: time | None = None) -> Path:
         stock = self.kis.stock(symbol.upper())
-        chart = stock.chart(start=start, end=end, period=1)
+        chart = stock.chart(start=start_time, end=end_time, period=1)
         rows: list[dict[str, Any]] = []
 
         for bar in chart.bars:
-            timestamp = getattr(bar, "time", None) or getattr(bar, "date", None)
+            timestamp = getattr(bar, "time_kst", None) or getattr(bar, "time", None) or getattr(bar, "date", None)
             rows.append(
                 {
                     "timestamp": pd.to_datetime(timestamp, utc=True),
@@ -102,6 +120,6 @@ class KisChartIngestor:
             )
 
         if not rows:
-            raise ValueError(f"KIS returned no bars for {symbol.upper()} between {start} and {end}")
+            raise ValueError(f"KIS returned no intraday bars for {symbol.upper()}")
 
         return self.repository.write_bars(symbol.upper(), pd.DataFrame(rows), Timeframe.ONE_MINUTE)

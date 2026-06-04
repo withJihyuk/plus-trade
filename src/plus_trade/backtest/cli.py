@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import time
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from plus_trade.backtest.data import BarRepository, KisChartIngestor, load_universe_config
+from plus_trade.backtest.data import BarImporter, BarRepository, KisChartIngestor, load_universe_config
 from plus_trade.backtest.engine import BacktestResult, run_backtest
 from plus_trade.config import load_settings
 from plus_trade.kis_client import create_kis_client
@@ -22,10 +22,10 @@ console = Console()
 @backtest_app.command()
 def ingest(
     universe: Path = typer.Option(..., "--universe", exists=True, readable=True),
-    start: str = typer.Option(..., "--start", help="Start date in YYYY-MM-DD format."),
-    end: str = typer.Option(..., "--end", help="End date in YYYY-MM-DD format."),
+    start_time: str | None = typer.Option(None, "--start-time", help="Intraday start time in HH:MM format."),
+    end_time: str | None = typer.Option(None, "--end-time", help="Intraday end time in HH:MM format."),
 ) -> None:
-    """Fetch 1-minute KIS chart data and persist it as local Parquet."""
+    """Fetch today's 1-minute KIS chart data and persist it as local Parquet."""
 
     settings = load_settings()
     kis = create_kis_client(settings)
@@ -33,18 +33,30 @@ def ingest(
     ingestor = KisChartIngestor(kis, repository)
     universe_config = load_universe_config(universe)
     symbols = sorted(set(universe_config.symbols + universe_config.benchmarks))
-    start_date = _parse_date(start, "start")
-    end_date = _parse_date(end, "end")
+    parsed_start_time = _parse_time(start_time, "start-time") if start_time else None
+    parsed_end_time = _parse_time(end_time, "end-time") if end_time else None
 
     table = Table(title="backtest ingest")
     table.add_column("symbol")
     table.add_column("path")
 
     for symbol in symbols:
-        path = ingestor.ingest_symbol(symbol, start=start_date, end=end_date)
+        path = ingestor.ingest_symbol(symbol, start_time=parsed_start_time, end_time=parsed_end_time)
         table.add_row(symbol, str(path))
 
     console.print(table)
+
+
+@backtest_app.command("import-bars")
+def import_bars(
+    input_path: Path = typer.Option(..., "--input", exists=True, readable=True, file_okay=True, dir_okay=False),
+    symbol: str = typer.Option(..., "--symbol"),
+    file_format: str | None = typer.Option(None, "--format", help="Input format: csv or parquet. Defaults to extension."),
+) -> None:
+    """Import historical OHLCV bars into the local Parquet cache."""
+
+    path = BarImporter(BarRepository()).import_file(input_path, symbol=symbol, file_format=file_format)
+    console.print(f"imported {symbol.upper()} bars into {path}")
 
 
 @backtest_app.command("run")
@@ -63,8 +75,31 @@ def run_command(
 
 
 def _print_result(result: BacktestResult) -> None:
-    summary = Table(title="backtest summary")
+    portfolio = Table(title="portfolio summary")
+    portfolio.add_column("total return")
+    portfolio.add_column("cagr")
+    portfolio.add_column("sharpe")
+    portfolio.add_column("sortino")
+    portfolio.add_column("mdd")
+    portfolio.add_column("calmar")
+    portfolio.add_column("turnover")
+    portfolio.add_column("trades")
+    metrics = result.portfolio.metrics
+    portfolio.add_row(
+        _pct(metrics.total_return),
+        _pct(metrics.cagr),
+        f"{metrics.sharpe:.2f}",
+        f"{metrics.sortino:.2f}",
+        _pct(metrics.max_drawdown),
+        f"{metrics.calmar:.2f}",
+        _pct(result.portfolio.turnover),
+        str(result.portfolio.trade_count),
+    )
+    console.print(portfolio)
+
+    summary = Table(title="symbol breakdown")
     summary.add_column("symbol")
+    summary.add_column("capital")
     summary.add_column("total return")
     summary.add_column("cagr")
     summary.add_column("sharpe")
@@ -78,6 +113,7 @@ def _print_result(result: BacktestResult) -> None:
         metrics = symbol_result.metrics
         summary.add_row(
             symbol_result.symbol,
+            f"{symbol_result.allocated_capital:.2f}",
             _pct(metrics.total_return),
             _pct(metrics.cagr),
             f"{metrics.sharpe:.2f}",
@@ -91,7 +127,7 @@ def _print_result(result: BacktestResult) -> None:
     console.print(summary)
 
     if result.oos_metrics:
-        oos = Table(title="walk-forward OOS summary")
+        oos = Table(title="portfolio walk-forward OOS summary")
         oos.add_column("total return")
         oos.add_column("cagr")
         oos.add_column("sharpe")
@@ -110,7 +146,7 @@ def _print_result(result: BacktestResult) -> None:
         console.print(oos)
 
     if result.regime_metrics:
-        regime_table = Table(title="regime breakdown")
+        regime_table = Table(title="portfolio regime breakdown")
         regime_table.add_column("regime")
         regime_table.add_column("total return")
         regime_table.add_column("sharpe")
@@ -124,8 +160,8 @@ def _pct(value: float) -> str:
     return f"{value * 100:.2f}%"
 
 
-def _parse_date(value: str, name: str) -> date:
+def _parse_time(value: str, name: str) -> time:
     try:
-        return date.fromisoformat(value)
+        return time.fromisoformat(value)
     except ValueError as exc:
-        raise typer.BadParameter(f"{name} must use YYYY-MM-DD format") from exc
+        raise typer.BadParameter(f"{name} must use HH:MM format") from exc

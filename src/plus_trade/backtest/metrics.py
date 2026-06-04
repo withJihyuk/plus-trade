@@ -46,3 +46,13 @@ def calculate_metrics(equity_curve: pd.Series, *, periods_per_year: int) -> Perf
         max_drawdown=max_drawdown,
         calmar=calmar,
     )
+
+
+def calculate_metrics_from_returns(returns: pd.Series, *, periods_per_year: int) -> PerformanceMetrics:
+    clean_returns = returns.astype(float).dropna()
+    if clean_returns.empty:
+        return PerformanceMetrics(0, 0, 0, 0, 0, 0, 0)
+
+    equity = (1 + clean_returns).cumprod()
+    equity = pd.concat([pd.Series([1.0]), equity.reset_index(drop=True)], ignore_index=True)
+    return calculate_metrics(equity, periods_per_year=periods_per_year)

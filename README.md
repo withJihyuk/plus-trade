@@ -45,7 +45,8 @@ DISCORD_WEBHOOK_URL=
 uv run plus-trade doctor
 uv run plus-trade notify-test
 uv run plus-trade run --once
-uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start 2026-01-01 --end 2026-03-31
+uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start-time 09:30 --end-time 16:00
+uv run plus-trade backtest import-bars --input data/AAPL.csv --symbol AAPL
 uv run plus-trade backtest run --config configs/backtests/example.yaml
 ```
 
@@ -59,10 +60,12 @@ Without a webhook it exits successfully as a no-op.
 refreshes the USD/KRW FX cache when stale, persists runtime state, and sends a
 Discord summary when a webhook is configured.
 
-`backtest ingest` fetches KIS 1-minute chart data and stores it as local Parquet.
-`backtest run` reads only local Parquet data, resamples to the configured
-timeframe, applies long-only target-weight strategy signals, next-bar-open fills,
-costs, slippage, OOS, and regime summaries.
+`backtest ingest` fetches today's KIS 1-minute chart data and stores it as local
+Parquet. The KIS minute endpoint is intraday-only, so historical backtest data
+should be loaded with `backtest import-bars` from CSV or Parquet. `backtest run`
+reads only local Parquet data, resamples to the configured timeframe, applies
+long-only target-weight strategy signals, next-bar-open fills, costs, slippage,
+OOS, and regime summaries.
 
 ## Runtime Paths
 
@@ -76,8 +79,13 @@ Runtime files are intentionally fixed in code:
 KIS token persistence and refresh is always enabled with `python-kis`
 `keep_token=var/kis_tokens`. WebSocket usage is always disabled in v1.
 
-## Testing Policy
+## Backtesting Data Contract
 
-Test code is limited to trading strategy validation and backtesting
-infrastructure. The current tests cover resampling, fills, costs, metrics,
-walk-forward splits, and backtest CLI command construction.
+Imported bars must contain:
+
+```text
+timestamp,symbol,open,high,low,close,volume
+```
+
+Timestamps are normalized to UTC and persisted under `var/data/bars/1m`.
+Backtest execution never calls KIS directly.

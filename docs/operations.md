@@ -31,7 +31,8 @@ Run these before any strategy or order code is added:
 uv run plus-trade doctor
 uv run plus-trade notify-test
 uv run plus-trade run --once
-uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start 2026-01-01 --end 2026-03-31
+uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start-time 09:30 --end-time 16:00
+uv run plus-trade backtest import-bars --input data/AAPL.csv --symbol AAPL
 uv run plus-trade backtest run --config configs/backtests/example.yaml
 ```
 
@@ -39,9 +40,11 @@ uv run plus-trade backtest run --config configs/backtests/example.yaml
 `notify-test` should no-op when `DISCORD_WEBHOOK_URL` is empty. `run --once`
 requires valid KIS credentials and may call the KIS quote API to refresh FX.
 
-`backtest ingest` requires valid KIS credentials and writes 1-minute bars to
-`var/data/bars/1m`. `backtest run` never calls KIS; it fails with a clear missing
-data message if required Parquet files are absent.
+`backtest ingest` requires valid KIS credentials and writes today's 1-minute bars
+to `var/data/bars/1m`. KIS minute charts accept intraday time ranges, not
+arbitrary historical date ranges. Use `backtest import-bars` for historical
+minute data. `backtest run` never calls KIS; it fails with a clear missing data
+message if required Parquet files are absent.
 
 ## Discord
 
@@ -55,18 +58,15 @@ FX means USD/KRW exchange-rate state. v1 uses the `exchange_rate` value from the
 KIS quote for the fixed reference symbol `AAPL`. The rate is cached in SQLite for
 `FX_RATE_TTL_SECONDS`.
 
-## Testing Policy
-
-Do not add general unit tests for live-operation infrastructure. Tests are
-allowed for strategy validation, backtesting, and signal verification. Current
-backtest tests cover only deterministic calculation behavior and CLI command
-construction.
-
 ## Backtest Assumptions
 
-- Source data is KIS 1-minute OHLCV, stored locally as Parquet.
+- Source data is 1-minute OHLCV, stored locally as Parquet.
+- KIS ingest is for today's intraday bars only.
+- Historical bars are imported from local CSV or Parquet.
 - 5-minute and 15-minute bars are resampled from the 1-minute source.
 - v1 strategies are long-only target-weight strategies.
 - Signals use current bar close data only; fills occur at the next bar open.
+- Portfolio summary uses equal capital allocation across configured symbols.
+- OOS and regime summaries are portfolio-level metrics.
 - Fee bps, FX spread bps, slippage bps, and volume participation cap are defined
   in `configs/backtests/*.yaml`.
