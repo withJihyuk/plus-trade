@@ -1,0 +1,19 @@
+universe: configs/universes/us-core.yaml
+start: "2026-01-01"
+end: "2026-03-31"
+timeframe: 5m
+initial_capital: 10000
+costs:
+  fee_bps: 5
+  fx_spread_bps: 10
+  slippage_bps: 5
+  volume_participation_cap: 0.05
+walk_forward:
+  train_days: 20
+  test_days: 5
+strategy:
+  module: plus_trade.backtest.strategies.example
+  name: MovingAverageCrossStrategy
+  params:
+    fast_window: 5
+    slow_window: 20

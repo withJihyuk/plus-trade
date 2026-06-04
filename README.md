@@ -45,6 +45,8 @@ DISCORD_WEBHOOK_URL=
 uv run plus-trade doctor
 uv run plus-trade notify-test
 uv run plus-trade run --once
+uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start 2026-01-01 --end 2026-03-31
+uv run plus-trade backtest run --config configs/backtests/example.yaml
 ```
 
 `doctor` initializes local runtime directories and SQLite state, then reports
@@ -57,12 +59,18 @@ Without a webhook it exits successfully as a no-op.
 refreshes the USD/KRW FX cache when stale, persists runtime state, and sends a
 Discord summary when a webhook is configured.
 
+`backtest ingest` fetches KIS 1-minute chart data and stores it as local Parquet.
+`backtest run` reads only local Parquet data, resamples to the configured
+timeframe, applies long-only target-weight strategy signals, next-bar-open fills,
+costs, slippage, OOS, and regime summaries.
+
 ## Runtime Paths
 
 Runtime files are intentionally fixed in code:
 
 - `var/plus_trade.sqlite3`
 - `var/kis_tokens`
+- `var/data/bars/1m/{SYMBOL}.parquet`
 - `var/logs`
 
 KIS token persistence and refresh is always enabled with `python-kis`
@@ -70,5 +78,6 @@ KIS token persistence and refresh is always enabled with `python-kis`
 
 ## Testing Policy
 
-No general infrastructure tests are included. Test code should only be added
-when trading strategy validation, backtesting, or signal verification is added.
+Test code is limited to trading strategy validation and backtesting
+infrastructure. The current tests cover resampling, fills, costs, metrics,
+walk-forward splits, and backtest CLI command construction.

@@ -20,6 +20,8 @@ and no order placement.
 - `plus_trade.messaging`: Discord webhook notifier with no-op behavior when the
   webhook is absent.
 - `plus_trade.runner`: One operational cycle orchestration.
+- `plus_trade.backtest`: Local-Parquet backtesting package for strategy
+  validation. It is intentionally separate from the live runner.
 
 ## Data Flow
 
@@ -30,6 +32,21 @@ a Discord summary when configured.
 The command does not place orders. Strategy and order modules should be added
 later behind explicit interfaces once strategy validation exists.
 
+## Backtesting Flow
+
+Backtesting uses KIS only for data ingestion. `plus-trade backtest ingest` writes
+1-minute bars to `var/data/bars/1m/{SYMBOL}.parquet`. `plus-trade backtest run`
+then reads local Parquet only, so runs are reproducible and do not depend on API
+availability.
+
+The v1 engine is pandas vector-based. Strategies return long-only target weights
+between `0.0` and `1.0`. Signals are generated from the current bar close, and
+position changes are filled at the next bar open with fee bps, FX spread bps,
+slippage bps, and a 1-minute volume participation cap.
+
+The console output reports risk-adjusted performance metrics, walk-forward OOS
+summary, and regime breakdown when benchmark data is present.
+
 ## Runtime State
 
 All local runtime state is under `var/`:
@@ -37,4 +54,5 @@ All local runtime state is under `var/`:
 - `var/plus_trade.sqlite3`: runtime state, market session observations, FX cache,
   notification history.
 - `var/kis_tokens`: `python-kis` token cache.
+- `var/data/bars`: Parquet historical bar cache.
 - `var/logs`: reserved for future file logging.

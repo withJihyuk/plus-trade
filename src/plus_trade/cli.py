@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
 
+from plus_trade.backtest.cli import backtest_app
 from plus_trade.config import load_settings
 from plus_trade.messaging import DiscordNotifier
 from plus_trade.paths import DB_PATH, KIS_TOKEN_DIR, LOG_DIR, ensure_runtime_dirs
@@ -17,6 +18,7 @@ from plus_trade.state import StateStore
 
 
 app = typer.Typer(no_args_is_help=True, help="plus-trade auto-trading service skeleton")
+app.add_typer(backtest_app, name="backtest")
 console = Console()
 
 

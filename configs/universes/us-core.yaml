@@ -1,0 +1,8 @@
+symbols:
+  - AAPL
+  - MSFT
+  - NVDA
+benchmarks:
+  - SPY
+  - QQQ
+calendar: NYSE
