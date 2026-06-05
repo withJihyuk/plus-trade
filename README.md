@@ -1,20 +1,20 @@
 # plus-trade
 
-`plus-trade` is a uv-based Python CLI skeleton for a Korea Investment & Securities
-auto-trading service. The first version focuses on operational plumbing:
-configuration, KIS client creation, token persistence, US market state, FX cache,
-SQLite state, and Discord notifications.
+`plus-trade`는 한국투자증권 기반 자동 트레이딩 서비스를 만들기 위한
+uv 기반 Python CLI 프로젝트입니다. 첫 버전은 운영에 필요한 기본 배관에
+집중합니다. 설정 로딩, KIS 클라이언트 생성, 토큰 저장, 미국장 상태 확인,
+FX 캐시, SQLite 상태 저장, Discord 알림이 포함됩니다.
 
-It does not implement trading strategies or place orders.
+아직 실제 거래 전략 실행이나 주문 제출은 구현하지 않습니다.
 
-## Setup
+## 설정
 
 ```bash
 uv sync
 cp .env.example .env
 ```
 
-Fill in `.env` with the KIS credentials for the mode you want to run.
+실행할 모드에 맞는 KIS 인증 정보를 `.env`에 채웁니다.
 
 ```dotenv
 PLUS_TRADE_ENV=local
@@ -39,7 +39,7 @@ FX_RATE_TTL_SECONDS=3600
 DISCORD_WEBHOOK_URL=
 ```
 
-## Commands
+## 명령어
 
 ```bash
 uv run plus-trade doctor
@@ -51,64 +51,65 @@ uv run plus-trade backtest import-bars --input data/AAPL.csv --symbol AAPL
 uv run plus-trade backtest run --config configs/backtests/example.yaml
 ```
 
-`doctor` initializes local runtime directories and SQLite state, then reports
-which credentials and integrations are configured.
+`doctor`는 로컬 런타임 디렉터리와 SQLite 상태를 초기화한 뒤, 어떤 인증
+정보와 연동이 설정되어 있는지 출력합니다.
 
-`notify-test` sends a Discord message when `DISCORD_WEBHOOK_URL` is present.
-Without a webhook it exits successfully as a no-op.
+`notify-test`는 `DISCORD_WEBHOOK_URL`이 있으면 Discord 메시지를 보냅니다.
+웹훅이 없으면 아무 작업 없이 성공 종료합니다.
 
-`run --once` creates the KIS client, resolves current NYSE regular-session state,
-refreshes the USD/KRW FX cache when stale, persists runtime state, and sends a
-Discord summary when a webhook is configured.
+`run --once`는 KIS 클라이언트를 만들고, 현재 NYSE 정규장 상태를 확인하고,
+USD/KRW FX 캐시가 만료됐으면 갱신하고, 런타임 상태를 저장합니다. Discord
+웹훅이 설정되어 있으면 요약 알림도 보냅니다.
 
-`backtest ingest-yfinance` fetches historical OHLCV bars from yfinance and stores
-them as local Parquet. The default backtest timeframe is `1h`, which is the
-practical free-data compromise for multi-month intraday validation. yfinance
-intraday availability is constrained by Yahoo's retention limits; if a request
-is outside that range, the command fails with the provider error surfaced.
+`backtest ingest-yfinance`는 yfinance에서 과거 OHLCV 봉 데이터를 받아 로컬
+Parquet으로 저장합니다. 기본 백테스트 시간축은 `1h`입니다. 무료 데이터로
+몇 달 단위 intraday 검증을 하기 위한 현실적인 절충안입니다. yfinance
+intraday 데이터는 Yahoo의 보관 기간 제한을 받으므로, 해당 범위를 벗어난
+요청은 provider 에러를 그대로 보여주며 실패합니다.
 
-`backtest ingest` fetches today's KIS 1-minute chart data and stores it as local
-Parquet. The KIS minute endpoint is intraday-only, so it is an operational data
-path, not the default historical backtest source. `backtest import-bars` remains
-available for external CSV or Parquet data. `backtest run` reads only local
-Parquet data, applies long-only target-weight strategy signals, next-bar-open
-fills, costs, slippage, OOS, and regime summaries.
+`backtest ingest`는 오늘의 KIS 1분봉 차트 데이터를 받아 로컬 Parquet으로
+저장합니다. KIS 분봉 endpoint는 당일 intraday 용도이므로, 기본 과거
+백테스트 데이터 소스가 아니라 운영 데이터 경로입니다. 외부 CSV 또는
+Parquet 데이터는 `backtest import-bars`로 넣을 수 있습니다. `backtest run`은
+로컬 Parquet만 읽고, long-only target-weight 전략 신호, 다음 봉 시가 체결,
+비용, 슬리피지, OOS, 레짐 요약을 적용합니다.
 
-## Backtest Output
+## 백테스트 출력
 
-`portfolio summary` is the first result to read. It aggregates all configured
-symbols after equal capital allocation. `symbol breakdown` shows whether the
-portfolio result is broad-based or driven by one name.
+`portfolio summary`를 가장 먼저 봅니다. 설정된 모든 종목에 자본을 동일하게
+배분한 뒤 합산한 포트폴리오 결과입니다. `symbol breakdown`은 성과가 여러
+종목에서 고르게 나온 것인지, 특정 종목 하나에 끌려간 것인지 보여줍니다.
 
-Key fields:
+주요 필드:
 
-- `total return`: total portfolio gain or loss over the configured period.
-- `cagr`: annualized return. Short backtests can make this look extreme.
-- `sharpe` / `sortino`: risk-adjusted return. Negative values mean the strategy
-  lost money after taking risk.
-- `mdd`: maximum drawdown from peak equity to trough equity.
-- `calmar`: CAGR divided by absolute max drawdown.
-- `turnover`: traded notional divided by initial capital.
-- `trades`: simulated fill count.
+- `total return`: 설정 기간 동안의 전체 포트폴리오 수익률입니다.
+- `cagr`: 연율화 수익률입니다. 짧은 백테스트에서는 숫자가 과장될 수
+  있습니다.
+- `sharpe` / `sortino`: 위험 대비 수익률입니다. 음수면 리스크를 감수했지만
+  전략이 손실을 냈다는 뜻입니다.
+- `mdd`: 포트폴리오 고점 대비 최대 낙폭입니다.
+- `calmar`: CAGR을 최대 낙폭의 절댓값으로 나눈 값입니다.
+- `turnover`: 거래 notional을 초기 자본으로 나눈 회전율입니다.
+- `trades`: 시뮬레이션 체결 횟수입니다.
 
-The current example strategy is only a pipeline check. If it prints a negative
-portfolio return, negative Sharpe, high turnover, and losses in sideways or
-downtrend regimes, read that as a strategy failure, not a data or engine failure.
-It means the moving-average sample is getting whipsawed and paying too much in
-costs for the signal quality.
+현재 예제 전략은 파이프라인 확인용입니다. 포트폴리오 수익률이 음수이고,
+Sharpe가 음수이고, turnover가 높고, 횡보장이나 하락장 레짐에서 손실이
+난다면 데이터나 엔진 문제가 아니라 전략 실패로 봅니다. 이동평균 샘플
+전략이 whipsaw에 걸리고, 신호 품질 대비 너무 많은 비용을 내고 있다는
+뜻입니다.
 
-`portfolio walk-forward OOS summary` is more important than the full-period
-summary when judging overfit. `portfolio regime breakdown` shows where the
-strategy makes or loses money by market state. A strategy that only works in
-`uptrend_*` regimes needs a filter, cash rule, or risk control before it is a
-real candidate.
+과최적화 여부를 판단할 때는 전체 기간 요약보다
+`portfolio walk-forward OOS summary`가 더 중요합니다.
+`portfolio regime breakdown`은 시장 상태별로 전략이 어디서 벌고 어디서
+잃는지 보여줍니다. `uptrend_*` 레짐에서만 작동하는 전략은 실제 후보로
+보기 전에 필터, 현금 대기 규칙, 리스크 제어가 필요합니다.
 
-See `docs/strategy-development.md` for the strategy interface, execution
-assumptions, metric definitions, and promotion checklist.
+전략 인터페이스, 체결 가정, 지표 정의, 전략 승격 체크리스트는
+`docs/strategy-development.md`를 참고합니다.
 
-## Runtime Paths
+## 런타임 경로
 
-Runtime files are intentionally fixed in code:
+런타임 파일 경로는 의도적으로 코드에 고정되어 있습니다.
 
 - `var/plus_trade.sqlite3`
 - `var/kis_tokens`
@@ -116,18 +117,17 @@ Runtime files are intentionally fixed in code:
 - `var/data/bars/1h/{SYMBOL}.parquet`
 - `var/logs`
 
-KIS token persistence and refresh is always enabled with `python-kis`
-`keep_token=var/kis_tokens`. WebSocket usage is always disabled in v1.
+KIS 토큰 저장과 갱신은 `python-kis`의 `keep_token=var/kis_tokens`로 항상
+활성화됩니다. v1에서는 WebSocket 사용을 항상 비활성화합니다.
 
-## Backtesting Data Contract
+## 백테스트 데이터 계약
 
-Imported bars must contain:
+가져오는 봉 데이터는 다음 컬럼을 포함해야 합니다.
 
 ```text
 timestamp,symbol,open,high,low,close,volume
 ```
 
-Timestamps are normalized to UTC and persisted under `var/data/bars/1m`.
-Backtest execution never calls KIS or yfinance directly. It reads local Parquet
-for the configured timeframe first, then falls back to resampling local `1m`
-data when the configured timeframe cache is absent.
+timestamp는 UTC로 정규화됩니다. 백테스트 실행은 KIS나 yfinance를 직접
+호출하지 않습니다. 먼저 설정된 timeframe의 로컬 Parquet을 읽고, 해당
+timeframe 캐시가 없으면 로컬 `1m` 데이터를 리샘플링합니다.
