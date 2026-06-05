@@ -74,6 +74,38 @@ available for external CSV or Parquet data. `backtest run` reads only local
 Parquet data, applies long-only target-weight strategy signals, next-bar-open
 fills, costs, slippage, OOS, and regime summaries.
 
+## Backtest Output
+
+`portfolio summary` is the first result to read. It aggregates all configured
+symbols after equal capital allocation. `symbol breakdown` shows whether the
+portfolio result is broad-based or driven by one name.
+
+Key fields:
+
+- `total return`: total portfolio gain or loss over the configured period.
+- `cagr`: annualized return. Short backtests can make this look extreme.
+- `sharpe` / `sortino`: risk-adjusted return. Negative values mean the strategy
+  lost money after taking risk.
+- `mdd`: maximum drawdown from peak equity to trough equity.
+- `calmar`: CAGR divided by absolute max drawdown.
+- `turnover`: traded notional divided by initial capital.
+- `trades`: simulated fill count.
+
+The current example strategy is only a pipeline check. If it prints a negative
+portfolio return, negative Sharpe, high turnover, and losses in sideways or
+downtrend regimes, read that as a strategy failure, not a data or engine failure.
+It means the moving-average sample is getting whipsawed and paying too much in
+costs for the signal quality.
+
+`portfolio walk-forward OOS summary` is more important than the full-period
+summary when judging overfit. `portfolio regime breakdown` shows where the
+strategy makes or loses money by market state. A strategy that only works in
+`uptrend_*` regimes needs a filter, cash rule, or risk control before it is a
+real candidate.
+
+See `docs/strategy-development.md` for the strategy interface, execution
+assumptions, metric definitions, and promotion checklist.
+
 ## Runtime Paths
 
 Runtime files are intentionally fixed in code:
