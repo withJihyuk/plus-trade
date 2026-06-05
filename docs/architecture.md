@@ -34,17 +34,17 @@ later behind explicit interfaces once strategy validation exists.
 
 ## Backtesting Flow
 
-Backtesting uses KIS only for today's intraday data ingestion.
-`plus-trade backtest ingest` writes today's 1-minute bars to
-`var/data/bars/1m/{SYMBOL}.parquet`. Historical data enters through
-`plus-trade backtest import-bars`, which accepts CSV or Parquet files with the
-standard OHLCV schema. `plus-trade backtest run` reads local Parquet only, so
-runs are reproducible and do not depend on API availability.
+Backtesting uses provider ingestion only to populate local Parquet. The default
+historical path is `plus-trade backtest ingest-yfinance`, which writes native
+timeframe bars such as `var/data/bars/1h/{SYMBOL}.parquet`. KIS ingestion remains
+available for today's 1-minute intraday bars, and external historical files enter
+through `plus-trade backtest import-bars`. `plus-trade backtest run` reads local
+Parquet only, so runs are reproducible and do not depend on API availability.
 
 The v1 engine is pandas vector-based. Strategies return long-only target weights
 between `0.0` and `1.0`. Signals are generated from the current bar close, and
 position changes are filled at the next bar open with fee bps, FX spread bps,
-slippage bps, and a 1-minute volume participation cap.
+slippage bps, and a bar-volume participation cap.
 
 The console output reports portfolio-level risk-adjusted metrics first, then
 symbol breakdowns, walk-forward OOS summary, and portfolio regime breakdown when

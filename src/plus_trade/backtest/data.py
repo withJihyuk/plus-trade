@@ -1,8 +1,8 @@
-"""Historical bar data loading, persistence, and KIS ingestion."""
+"""Historical bar data loading, persistence, and market data ingestion."""
 
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -123,3 +123,125 @@ class KisChartIngestor:
             raise ValueError(f"KIS returned no intraday bars for {symbol.upper()}")
 
         return self.repository.write_bars(symbol.upper(), pd.DataFrame(rows), Timeframe.ONE_MINUTE)
+
+
+class YFinanceBarIngestor:
+    def __init__(self, repository: BarRepository) -> None:
+        self.repository = repository
+
+    def ingest_symbol(
+        self,
+        symbol: str,
+        *,
+        start: date,
+        end: date,
+        timeframe: Timeframe,
+        timeout: float = 20,
+    ) -> Path:
+        if end < start:
+            raise ValueError("end date must be greater than or equal to start date")
+
+        symbol = symbol.upper()
+        frames: list[pd.DataFrame] = []
+        for chunk_start, chunk_end in self._chunk_ranges(start, end, timeframe):
+            frame = self._download_chunk(
+                symbol,
+                start=chunk_start,
+                end=chunk_end,
+                timeframe=timeframe,
+                timeout=timeout,
+            )
+            if not frame.empty:
+                frames.append(frame)
+
+        if not frames:
+            raise ValueError(
+                f"yfinance returned no {timeframe.value} bars for {symbol} "
+                f"between {start.isoformat()} and {end.isoformat()}"
+            )
+
+        bars = pd.concat(frames, ignore_index=True)
+        return self.repository.write_bars(symbol, bars, timeframe)
+
+    def _chunk_ranges(self, start: date, end: date, timeframe: Timeframe) -> list[tuple[date, date]]:
+        chunk_days = 7 if timeframe is Timeframe.ONE_MINUTE else 59
+        final_exclusive = end + timedelta(days=1)
+        chunks: list[tuple[date, date]] = []
+        chunk_start = start
+        while chunk_start < final_exclusive:
+            chunk_end = min(chunk_start + timedelta(days=chunk_days), final_exclusive)
+            chunks.append((chunk_start, chunk_end))
+            chunk_start = chunk_end
+        return chunks
+
+    def _download_chunk(
+        self,
+        symbol: str,
+        *,
+        start: date,
+        end: date,
+        timeframe: Timeframe,
+        timeout: float,
+    ) -> pd.DataFrame:
+        try:
+            import yfinance as yf
+        except ImportError as exc:
+            raise RuntimeError("yfinance is not installed; run `uv sync` first") from exc
+
+        try:
+            previous_hide_exceptions = yf.config.debug.hide_exceptions
+            yf.config.debug.hide_exceptions = False
+            data = yf.Ticker(symbol).history(
+                start=start.isoformat(),
+                end=end.isoformat(),
+                interval=timeframe.value,
+                auto_adjust=False,
+                prepost=False,
+                actions=False,
+                repair=False,
+                timeout=timeout,
+            )
+        except Exception as exc:  # yfinance wraps Yahoo response failures inconsistently across versions.
+            raise RuntimeError(
+                f"failed to download {symbol} {timeframe.value} bars from yfinance "
+                f"for {start.isoformat()} to {end.isoformat()}: {exc}"
+            ) from exc
+        finally:
+            if "previous_hide_exceptions" in locals():
+                yf.config.debug.hide_exceptions = previous_hide_exceptions
+
+        return self._normalize_yfinance_bars(symbol, data)
+
+    def _normalize_yfinance_bars(self, symbol: str, data: pd.DataFrame | None) -> pd.DataFrame:
+        if data is None or data.empty:
+            return pd.DataFrame(columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"])
+
+        frame = data.copy()
+        if isinstance(frame.columns, pd.MultiIndex):
+            frame = self._flatten_yfinance_columns(symbol, frame)
+
+        rename_map = {
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+        }
+        missing = [column for column in rename_map if column not in frame.columns]
+        if missing:
+            raise ValueError(f"yfinance response for {symbol} missing columns: {', '.join(missing)}")
+
+        bars = frame.rename(columns=rename_map).loc[:, list(rename_map.values())].reset_index()
+        timestamp_column = bars.columns[0]
+        bars = bars.rename(columns={timestamp_column: "timestamp"})
+        bars["symbol"] = symbol
+        bars = bars.dropna(subset=["timestamp", "open", "high", "low", "close"])
+        bars["volume"] = bars["volume"].fillna(0)
+        return normalize_bars(bars)
+
+    def _flatten_yfinance_columns(self, symbol: str, frame: pd.DataFrame) -> pd.DataFrame:
+        for level in range(frame.columns.nlevels):
+            values = frame.columns.get_level_values(level)
+            if symbol in values:
+                return frame.xs(symbol, axis=1, level=level, drop_level=True)
+        return frame.droplevel([level for level in range(1, frame.columns.nlevels)], axis=1)

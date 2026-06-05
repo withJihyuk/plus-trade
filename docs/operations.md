@@ -31,6 +31,7 @@ Run these before any strategy or order code is added:
 uv run plus-trade doctor
 uv run plus-trade notify-test
 uv run plus-trade run --once
+uv run plus-trade backtest ingest-yfinance --universe configs/universes/us-core.yaml --start 2026-01-01 --end 2026-03-31 --timeframe 1h
 uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start-time 09:30 --end-time 16:00
 uv run plus-trade backtest import-bars --input data/AAPL.csv --symbol AAPL
 uv run plus-trade backtest run --config configs/backtests/example.yaml
@@ -40,11 +41,17 @@ uv run plus-trade backtest run --config configs/backtests/example.yaml
 `notify-test` should no-op when `DISCORD_WEBHOOK_URL` is empty. `run --once`
 requires valid KIS credentials and may call the KIS quote API to refresh FX.
 
+`backtest ingest-yfinance` downloads historical OHLCV bars into the local cache.
+The default operational choice is `1h`, which supports multi-month intraday
+backtests with free Yahoo data. Shorter intervals such as `5m` and `15m` are
+kept for recent-window work and forward accumulation, but Yahoo retention limits
+can reject older ranges.
+
 `backtest ingest` requires valid KIS credentials and writes today's 1-minute bars
 to `var/data/bars/1m`. KIS minute charts accept intraday time ranges, not
-arbitrary historical date ranges. Use `backtest import-bars` for historical
-minute data. `backtest run` never calls KIS; it fails with a clear missing data
-message if required Parquet files are absent.
+arbitrary historical date ranges. Use `backtest import-bars` for external local
+historical data. `backtest run` never calls KIS or yfinance; it fails with a
+clear missing data message if required Parquet files are absent.
 
 ## Discord
 
@@ -60,10 +67,12 @@ KIS quote for the fixed reference symbol `AAPL`. The rate is cached in SQLite fo
 
 ## Backtest Assumptions
 
-- Source data is 1-minute OHLCV, stored locally as Parquet.
-- KIS ingest is for today's intraday bars only.
-- Historical bars are imported from local CSV or Parquet.
-- 5-minute and 15-minute bars are resampled from the 1-minute source.
+- Source data is OHLCV, stored locally as Parquet by timeframe.
+- yfinance `1h` ingestion is the default historical bootstrap path.
+- KIS ingest is for today's intraday 1-minute bars only.
+- External historical bars can be imported from local CSV or Parquet.
+- Backtests prefer native timeframe bars, then fall back to resampling local
+  1-minute bars when available.
 - v1 strategies are long-only target-weight strategies.
 - Signals use current bar close data only; fills occur at the next bar open.
 - Portfolio summary uses equal capital allocation across configured symbols.

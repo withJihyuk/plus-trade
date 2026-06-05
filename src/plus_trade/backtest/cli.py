@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import time
+from datetime import date, time
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from plus_trade.backtest.data import BarImporter, BarRepository, KisChartIngestor, load_universe_config
+from plus_trade.backtest.data import (
+    BarImporter,
+    BarRepository,
+    KisChartIngestor,
+    YFinanceBarIngestor,
+    load_universe_config,
+)
 from plus_trade.backtest.engine import BacktestResult, run_backtest
+from plus_trade.backtest.models import Timeframe
 from plus_trade.config import load_settings
 from plus_trade.kis_client import create_kis_client
 
@@ -43,6 +50,45 @@ def ingest(
     for symbol in symbols:
         path = ingestor.ingest_symbol(symbol, start_time=parsed_start_time, end_time=parsed_end_time)
         table.add_row(symbol, str(path))
+
+    console.print(table)
+
+
+@backtest_app.command("ingest-yfinance")
+def ingest_yfinance(
+    universe: Path = typer.Option(..., "--universe", exists=True, readable=True),
+    start: str = typer.Option(..., "--start", help="Inclusive start date in YYYY-MM-DD format."),
+    end: str = typer.Option(..., "--end", help="Inclusive end date in YYYY-MM-DD format."),
+    timeframe: Timeframe = typer.Option(Timeframe.ONE_HOUR, "--timeframe"),
+    timeout: float = typer.Option(20, "--timeout", min=1, help="Per-request timeout in seconds."),
+) -> None:
+    """Fetch yfinance OHLCV bars and persist them as local Parquet."""
+
+    repository = BarRepository()
+    ingestor = YFinanceBarIngestor(repository)
+    universe_config = load_universe_config(universe)
+    symbols = sorted(set(universe_config.symbols + universe_config.benchmarks))
+    parsed_start = _parse_date(start, "start")
+    parsed_end = _parse_date(end, "end")
+
+    table = Table(title="backtest ingest-yfinance")
+    table.add_column("symbol")
+    table.add_column("timeframe")
+    table.add_column("path")
+
+    try:
+        for symbol in symbols:
+            path = ingestor.ingest_symbol(
+                symbol,
+                start=parsed_start,
+                end=parsed_end,
+                timeframe=timeframe,
+                timeout=timeout,
+            )
+            table.add_row(symbol, timeframe.value, str(path))
+    except (RuntimeError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     console.print(table)
 
@@ -165,3 +211,10 @@ def _parse_time(value: str, name: str) -> time:
         return time.fromisoformat(value)
     except ValueError as exc:
         raise typer.BadParameter(f"{name} must use HH:MM format") from exc
+
+
+def _parse_date(value: str, name: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise typer.BadParameter(f"{name} must use YYYY-MM-DD format") from exc

@@ -45,6 +45,7 @@ DISCORD_WEBHOOK_URL=
 uv run plus-trade doctor
 uv run plus-trade notify-test
 uv run plus-trade run --once
+uv run plus-trade backtest ingest-yfinance --universe configs/universes/us-core.yaml --start 2026-01-01 --end 2026-03-31 --timeframe 1h
 uv run plus-trade backtest ingest --universe configs/universes/us-core.yaml --start-time 09:30 --end-time 16:00
 uv run plus-trade backtest import-bars --input data/AAPL.csv --symbol AAPL
 uv run plus-trade backtest run --config configs/backtests/example.yaml
@@ -60,12 +61,18 @@ Without a webhook it exits successfully as a no-op.
 refreshes the USD/KRW FX cache when stale, persists runtime state, and sends a
 Discord summary when a webhook is configured.
 
+`backtest ingest-yfinance` fetches historical OHLCV bars from yfinance and stores
+them as local Parquet. The default backtest timeframe is `1h`, which is the
+practical free-data compromise for multi-month intraday validation. yfinance
+intraday availability is constrained by Yahoo's retention limits; if a request
+is outside that range, the command fails with the provider error surfaced.
+
 `backtest ingest` fetches today's KIS 1-minute chart data and stores it as local
-Parquet. The KIS minute endpoint is intraday-only, so historical backtest data
-should be loaded with `backtest import-bars` from CSV or Parquet. `backtest run`
-reads only local Parquet data, resamples to the configured timeframe, applies
-long-only target-weight strategy signals, next-bar-open fills, costs, slippage,
-OOS, and regime summaries.
+Parquet. The KIS minute endpoint is intraday-only, so it is an operational data
+path, not the default historical backtest source. `backtest import-bars` remains
+available for external CSV or Parquet data. `backtest run` reads only local
+Parquet data, applies long-only target-weight strategy signals, next-bar-open
+fills, costs, slippage, OOS, and regime summaries.
 
 ## Runtime Paths
 
@@ -74,6 +81,7 @@ Runtime files are intentionally fixed in code:
 - `var/plus_trade.sqlite3`
 - `var/kis_tokens`
 - `var/data/bars/1m/{SYMBOL}.parquet`
+- `var/data/bars/1h/{SYMBOL}.parquet`
 - `var/logs`
 
 KIS token persistence and refresh is always enabled with `python-kis`
@@ -88,4 +96,6 @@ timestamp,symbol,open,high,low,close,volume
 ```
 
 Timestamps are normalized to UTC and persisted under `var/data/bars/1m`.
-Backtest execution never calls KIS directly.
+Backtest execution never calls KIS or yfinance directly. It reads local Parquet
+for the configured timeframe first, then falls back to resampling local `1m`
+data when the configured timeframe cache is absent.

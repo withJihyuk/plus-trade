@@ -28,8 +28,9 @@ def resample_bars(bars: pd.DataFrame, timeframe: Timeframe) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     for symbol, symbol_bars in normalized.groupby("symbol", sort=True):
         indexed = symbol_bars.set_index("timestamp")
+        offset = "30min" if timeframe is Timeframe.ONE_HOUR else None
         resampled = (
-            indexed.resample(timeframe.pandas_rule, label="left", closed="left")
+            indexed.resample(timeframe.pandas_rule, label="left", closed="left", offset=offset)
             .agg(
                 {
                     "open": "first",

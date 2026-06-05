@@ -14,6 +14,7 @@ class Timeframe(StrEnum):
     ONE_MINUTE = "1m"
     FIVE_MINUTES = "5m"
     FIFTEEN_MINUTES = "15m"
+    ONE_HOUR = "1h"
 
     @property
     def pandas_rule(self) -> str:
@@ -21,6 +22,16 @@ class Timeframe(StrEnum):
             Timeframe.ONE_MINUTE: "1min",
             Timeframe.FIVE_MINUTES: "5min",
             Timeframe.FIFTEEN_MINUTES: "15min",
+            Timeframe.ONE_HOUR: "1h",
+        }[self]
+
+    @property
+    def bars_per_trading_day(self) -> int:
+        return {
+            Timeframe.ONE_MINUTE: 390,
+            Timeframe.FIVE_MINUTES: 78,
+            Timeframe.FIFTEEN_MINUTES: 26,
+            Timeframe.ONE_HOUR: 7,
         }[self]
 
 
@@ -76,7 +87,7 @@ class BacktestRunConfig(BaseModel):
     universe: Path
     start: str
     end: str
-    timeframe: Timeframe = Timeframe.FIVE_MINUTES
+    timeframe: Timeframe = Timeframe.ONE_HOUR
     initial_capital: float = Field(default=10_000.0, gt=0)
     costs: CostConfig = Field(default_factory=CostConfig)
     walk_forward: WalkForwardConfig = Field(default_factory=WalkForwardConfig)

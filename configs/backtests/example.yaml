@@ -1,7 +1,7 @@
 universe: configs/universes/us-core.yaml
 start: "2026-01-01"
 end: "2026-03-31"
-timeframe: 5m
+timeframe: 1h
 initial_capital: 10000
 costs:
   fee_bps: 5

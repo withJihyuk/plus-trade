@@ -53,13 +53,7 @@ def load_strategy(config: BacktestRunConfig) -> Strategy:
 
 
 def periods_per_year(timeframe: Timeframe) -> int:
-    trading_days = 252
-    minutes_per_day = 390
-    if timeframe is Timeframe.ONE_MINUTE:
-        return trading_days * minutes_per_day
-    if timeframe is Timeframe.FIVE_MINUTES:
-        return trading_days * (minutes_per_day // 5)
-    return trading_days * (minutes_per_day // 15)
+    return 252 * timeframe.bars_per_trading_day
 
 
 def run_backtest(config_path, repository: BarRepository | None = None) -> BacktestResult:
@@ -74,8 +68,7 @@ def run_backtest(config_path, repository: BarRepository | None = None) -> Backte
     allocated_capital = config.initial_capital / len(universe.symbols)
 
     for symbol in universe.symbols:
-        bars = repo.read_bars(symbol, start=config.start, end=config.end, timeframe=Timeframe.ONE_MINUTE)
-        run_bars = resample_bars(bars, config.timeframe)
+        run_bars = _read_run_bars(repo, symbol, config)
         target_weights = strategy.target_weights(run_bars)
         simulation = simulate_target_weight_portfolio(
             run_bars,
@@ -106,6 +99,25 @@ def run_backtest(config_path, repository: BarRepository | None = None) -> Backte
         oos_metrics=oos_metrics,
         regime_metrics=regime_metrics,
     )
+
+
+def _read_run_bars(repo: BarRepository, symbol: str, config: BacktestRunConfig) -> pd.DataFrame:
+    try:
+        return repo.read_bars(symbol, start=config.start, end=config.end, timeframe=config.timeframe)
+    except (FileNotFoundError, ValueError) as target_error:
+        if config.timeframe is Timeframe.ONE_MINUTE:
+            raise target_error
+
+        try:
+            one_minute_bars = repo.read_bars(
+                symbol,
+                start=config.start,
+                end=config.end,
+                timeframe=Timeframe.ONE_MINUTE,
+            )
+        except (FileNotFoundError, ValueError):
+            raise target_error
+        return resample_bars(one_minute_bars, config.timeframe)
 
 
 def _build_portfolio_result(
@@ -178,11 +190,11 @@ def _calculate_regime_metrics(
         return {}
 
     try:
-        benchmark = repo.read_bars(benchmarks[0], start=config.start, end=config.end, timeframe=Timeframe.ONE_MINUTE)
+        benchmark = _read_run_bars(repo, benchmarks[0], config)
     except (FileNotFoundError, ValueError):
         return {}
 
-    regimes = classify_trend_vol_regime(resample_bars(benchmark, config.timeframe))
+    regimes = classify_trend_vol_regime(benchmark)
     interval_returns = portfolio_equity.pct_change().dropna().rename("return")
     aligned = pd.DataFrame({"return": interval_returns}).join(regimes.rename("regime"), how="inner")
     output: dict[str, PerformanceMetrics] = {}
