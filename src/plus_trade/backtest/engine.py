@@ -90,7 +90,7 @@ def run_backtest(config_path, repository: BarRepository | None = None) -> Backte
         )
 
     portfolio = _build_portfolio_result(config, symbol_results)
-    oos_metrics = _calculate_oos_metrics(config, portfolio.equity_curve)
+    oos_metrics = _calculate_oos_metrics(config, universe.symbols, repo, strategy)
     regime_metrics = _calculate_regime_metrics(config, universe.benchmarks, repo, portfolio.equity_curve)
     return BacktestResult(
         config=config,
@@ -151,12 +151,18 @@ def _build_portfolio_result(
 
 def _calculate_oos_metrics(
     config: BacktestRunConfig,
-    equity: pd.Series,
+    symbols: list[str],
+    repo: BarRepository,
+    strategy: Strategy,
 ) -> PerformanceMetrics | None:
-    if equity.empty:
+    if not symbols:
         return None
 
-    sessions = pd.DatetimeIndex(equity.index.normalize().unique())
+    symbol_bars = {symbol: _read_run_bars(repo, symbol, config) for symbol in symbols}
+    session_values = []
+    for bars in symbol_bars.values():
+        session_values.extend(pd.to_datetime(bars["timestamp"], utc=True).dt.normalize().unique())
+    sessions = pd.DatetimeIndex(session_values).sort_values().unique()
     splits = generate_walk_forward_splits(
         sessions,
         train_days=config.walk_forward.train_days,
@@ -165,19 +171,59 @@ def _calculate_oos_metrics(
     if not splits:
         return None
 
-    test_segments: list[pd.Series] = []
+    allocated_capital = config.initial_capital / len(symbols)
+    test_returns: list[pd.Series] = []
     for split in splits:
-        mask = (equity.index.normalize() >= split.test_start) & (equity.index.normalize() <= split.test_end)
-        segment = equity.loc[mask]
-        if not segment.empty:
-            test_segments.append(segment)
+        symbol_equities: list[pd.Series] = []
+        for symbol, bars in symbol_bars.items():
+            timestamps = pd.to_datetime(bars["timestamp"], utc=True)
+            sessions_for_bars = timestamps.dt.normalize()
+            train_bars = bars[(sessions_for_bars >= split.train_start) & (sessions_for_bars <= split.train_end)]
+            test_bars = bars[(sessions_for_bars >= split.test_start) & (sessions_for_bars <= split.test_end)]
+            if train_bars.empty or len(test_bars) < 2:
+                continue
 
-    if not test_segments:
+            window_strategy = _fit_strategy_for_window(strategy, train_bars)
+            signal_bars = pd.concat([train_bars, test_bars], ignore_index=True)
+            target_weights = window_strategy.target_weights(signal_bars)
+            target_weights.index = pd.to_datetime(target_weights.index, utc=True)
+            test_index = pd.DatetimeIndex(pd.to_datetime(test_bars["timestamp"], utc=True))
+            test_weights = target_weights[target_weights.index.isin(test_index)]
+            simulation = simulate_target_weight_portfolio(
+                test_bars,
+                test_weights,
+                initial_capital=allocated_capital,
+                fee_bps=config.costs.fee_bps,
+                fx_spread_bps=config.costs.fx_spread_bps,
+                slippage_bps=config.costs.slippage_bps,
+                volume_participation_cap=config.costs.volume_participation_cap,
+            )
+            symbol_equities.append(simulation.equity_curve.rename(symbol))
+
+        if not symbol_equities:
+            continue
+
+        equity_frame = pd.concat(symbol_equities, axis=1, sort=True)
+        equity_frame = equity_frame.ffill().fillna(allocated_capital)
+        portfolio_equity = equity_frame.sum(axis=1).sort_index()
+        returns = portfolio_equity.pct_change().dropna()
+        if not returns.empty:
+            test_returns.append(returns)
+
+    if not test_returns:
         return None
 
-    oos_equity = pd.concat(test_segments).sort_index()
-    oos_equity = oos_equity[~oos_equity.index.duplicated(keep="first")]
-    return calculate_metrics(oos_equity, periods_per_year=periods_per_year(config.timeframe))
+    oos_returns = pd.concat(test_returns).sort_index()
+    oos_returns = oos_returns[~oos_returns.index.duplicated(keep="first")]
+    return calculate_metrics_from_returns(oos_returns, periods_per_year=periods_per_year(config.timeframe))
+
+
+def _fit_strategy_for_window(strategy: Strategy, train_bars: pd.DataFrame) -> Strategy:
+    fit = getattr(strategy, "fit", None)
+    if not callable(fit):
+        return strategy
+    fitted = fit(train_bars)
+    return fitted if fitted is not None else strategy
 
 
 def _calculate_regime_metrics(

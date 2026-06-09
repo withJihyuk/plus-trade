@@ -70,10 +70,18 @@ High turnover is not automatically bad, but it must be justified by strong OOS
 performance. If turnover is high and Sharpe is negative, costs and whipsaw are
 probably destroying the strategy.
 
-## OOS And Regime Review
+## Walk-Forward OOS And Regime Review
 
-The walk-forward OOS summary reports only test-window performance. Treat OOS as
-more important than in-sample total return.
+The walk-forward OOS summary runs each test window separately instead of slicing
+the full-period equity curve. For each split, the engine passes the train window
+to `strategy.fit(train_bars)` when that method exists, then simulates only the
+test window and aggregates test-window returns. Strategies without `fit` run as
+static strategies, using the train window as indicator warmup context for test
+signals.
+
+Treat OOS as more important than in-sample total return. Automatic parameter
+search is not built into the engine; implement it inside `fit` when a strategy
+needs train-window parameter selection.
 
 Regime breakdown groups portfolio interval returns by benchmark regime:
 
@@ -105,4 +113,3 @@ Before promoting a strategy beyond experiment status, check:
 Automated test code, when added, belongs only to strategy validation. Runtime,
 broker, notification, and plumbing code should continue to be verified by manual
 checks unless this policy changes.
-

@@ -84,6 +84,8 @@ def simulate_target_weight_portfolio(
                 side = OrderSide.BUY if requested_qty > 0 else OrderSide.SELL
                 max_qty = float(row["volume"]) * volume_participation_cap
                 filled_qty = min(abs(requested_qty), max_qty)
+                if filled_qty <= 1e-12:
+                    continue
                 signed_qty = filled_qty if side is OrderSide.BUY else -filled_qty
                 fill_price = adjusted_fill_price(execution_price, side, slippage_bps=slippage_bps)
                 notional = signed_qty * fill_price
