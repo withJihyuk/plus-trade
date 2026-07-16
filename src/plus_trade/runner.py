@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from plus_trade.config import Settings
 from plus_trade.fx import FxRateProvider
 from plus_trade.kis_client import create_kis_client, describe_kis_mode
-from plus_trade.market import MarketCalendar, MarketSessionState
+from plus_trade.market import MARKET_NAME, MarketSessionState, current_market_state
 from plus_trade.messaging import DiscordNotifier, NotificationResult
 from plus_trade.state import FxRateSnapshot, StateStore
 
@@ -26,9 +26,9 @@ def run_once(settings: Settings, store: StateStore) -> RunOnceResult:
 
     kis = create_kis_client(settings)
     mode = describe_kis_mode(settings)
-    market = MarketCalendar().current_state()
+    market = current_market_state()
     store.record_market_state(
-        calendar=market.calendar,
+        calendar=MARKET_NAME,
         state=market.state.value,
         market_open=market.market_open,
         market_close=market.market_close,

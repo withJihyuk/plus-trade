@@ -12,7 +12,7 @@ and no order placement.
   `pydantic-settings`.
 - `plus_trade.kis_client`: `PyKis` factory. Token persistence is always enabled
   through `keep_token=var/kis_tokens`; WebSocket is always disabled.
-- `plus_trade.market`: NYSE regular-session state using
+- `plus_trade.market`: NYSE-only regular-session state function using
   `pandas_market_calendars`.
 - `plus_trade.fx`: USD/KRW cache sourced from the `exchange_rate` field on the
   KIS quote for the fixed reference symbol `AAPL`. The currency pair is fixed in
