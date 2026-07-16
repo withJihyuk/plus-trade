@@ -11,7 +11,14 @@ from rich.table import Table
 
 from plus_trade.config import load_settings
 from plus_trade.messaging import DiscordNotifier
-from plus_trade.paths import DB_PATH, KIS_TOKEN_DIR, LOG_DIR, ensure_runtime_dirs
+from plus_trade.paths import (
+    DB_PATH,
+    FX_BASE_CURRENCY,
+    FX_QUOTE_CURRENCY,
+    KIS_TOKEN_DIR,
+    LOG_DIR,
+    ensure_runtime_dirs,
+)
 from plus_trade.runner import run_once
 from plus_trade.state import StateStore
 
@@ -65,7 +72,7 @@ def doctor() -> None:
     table.add_row("discord", "configured" if settings.discord_enabled else "not configured", "ok")
     table.add_row(
         "fx",
-        f"{settings.fx_base_currency}/{settings.fx_quote_currency}, ttl={settings.fx_rate_ttl_seconds}s",
+        f"{FX_BASE_CURRENCY}/{FX_QUOTE_CURRENCY}, ttl={settings.fx_rate_ttl_seconds}s",
         "ok",
     )
 
@@ -125,7 +132,12 @@ def run(
         console.print(
             f"fx={result.fx_rate.base_currency}/{result.fx_rate.quote_currency} {result.fx_rate.rate:.4f}"
         )
+    if result.fx_error:
+        console.print(f"[red]fx_error={result.fx_error}[/red]")
     if result.notification.sent:
         console.print(f"discord={result.notification.detail}")
     else:
         console.print("discord=not configured")
+
+    if not result.success:
+        raise typer.Exit(code=1)

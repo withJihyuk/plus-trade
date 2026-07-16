@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from plus_trade.config import Settings
-from plus_trade.paths import FX_REFERENCE_SYMBOL
+from plus_trade.paths import FX_BASE_CURRENCY, FX_QUOTE_CURRENCY, FX_REFERENCE_SYMBOL
 from plus_trade.state import FxRateSnapshot, StateStore, utc_now
 
 
@@ -13,7 +13,7 @@ class FxRateProvider:
         self.store = store
 
     def get_usd_krw(self, kis: object, *, refresh: bool = False) -> FxRateSnapshot:
-        cached = self.store.get_fx_rate(self.settings.fx_base_currency, self.settings.fx_quote_currency)
+        cached = self.store.get_fx_rate(FX_BASE_CURRENCY, FX_QUOTE_CURRENCY)
         if cached and not refresh and cached.is_fresh(self.settings.fx_rate_ttl_seconds):
             return cached
 
@@ -23,8 +23,8 @@ class FxRateProvider:
             raise RuntimeError(f"KIS quote for {FX_REFERENCE_SYMBOL} did not include exchange_rate")
 
         snapshot = FxRateSnapshot(
-            base_currency=self.settings.fx_base_currency,
-            quote_currency=self.settings.fx_quote_currency,
+            base_currency=FX_BASE_CURRENCY,
+            quote_currency=FX_QUOTE_CURRENCY,
             rate=float(exchange_rate),
             source_symbol=FX_REFERENCE_SYMBOL,
             fetched_at=utc_now(),

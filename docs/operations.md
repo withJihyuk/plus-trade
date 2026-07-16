@@ -4,7 +4,8 @@
 
 Use `.env.example` as the source of truth for environment variables. Runtime
 paths, token behavior, WebSocket behavior, and FX reference symbol are fixed in
-code.
+code. `.env` and `var/` are resolved from the repository root regardless of the
+shell's current working directory.
 
 `KIS_VIRTUAL=true` runs against the virtual configuration and requires both real
 and virtual KIS credentials because `python-kis` accepts one active account while
@@ -35,7 +36,9 @@ uv run plus-trade run --once
 
 `doctor` should run without secrets and show missing credentials explicitly.
 `notify-test` should no-op when `DISCORD_WEBHOOK_URL` is empty. `run --once`
-requires valid KIS credentials and may call the KIS quote API to refresh FX.
+requires valid KIS credentials and may call the KIS quote API to refresh FX. An
+FX lookup failure or configured Discord delivery failure is recorded before the
+command exits with a non-zero status.
 
 ## Discord
 
@@ -47,7 +50,7 @@ v1.
 
 FX means USD/KRW exchange-rate state. v1 uses the `exchange_rate` value from the
 KIS quote for the fixed reference symbol `AAPL`. The rate is cached in SQLite for
-`FX_RATE_TTL_SECONDS`.
+`FX_RATE_TTL_SECONDS`. The currency pair is not configurable in v1.
 
 ## Testing Policy
 

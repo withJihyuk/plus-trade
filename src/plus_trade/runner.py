@@ -16,7 +16,9 @@ from plus_trade.state import FxRateSnapshot, StateStore
 class RunOnceResult:
     market: MarketSessionState
     fx_rate: FxRateSnapshot | None
+    fx_error: str | None
     notification: NotificationResult
+    success: bool
 
 
 def run_once(settings: Settings, store: StateStore) -> RunOnceResult:
@@ -73,4 +75,10 @@ def run_once(settings: Settings, store: StateStore) -> RunOnceResult:
         message=notification.detail,
     )
 
-    return RunOnceResult(market=market, fx_rate=fx_rate, notification=notification)
+    return RunOnceResult(
+        market=market,
+        fx_rate=fx_rate,
+        fx_error=fx_error,
+        notification=notification,
+        success=fx_error is None and notification.success,
+    )

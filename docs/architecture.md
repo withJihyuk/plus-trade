@@ -15,7 +15,8 @@ and no order placement.
 - `plus_trade.market`: NYSE regular-session state using
   `pandas_market_calendars`.
 - `plus_trade.fx`: USD/KRW cache sourced from the `exchange_rate` field on the
-  KIS quote for the fixed reference symbol `AAPL`.
+  KIS quote for the fixed reference symbol `AAPL`. The currency pair is fixed in
+  code for v1.
 - `plus_trade.state`: SQLite schema and persistence helpers.
 - `plus_trade.messaging`: Discord webhook notifier with no-op behavior when the
   webhook is absent.
@@ -25,7 +26,8 @@ and no order placement.
 
 `run --once` loads settings, initializes SQLite, creates a KIS client, resolves
 market state, refreshes FX if the cached rate is stale, persists state, and sends
-a Discord summary when configured.
+a Discord summary when configured. It exits unsuccessfully after persistence and
+notification attempts when FX lookup or configured Discord delivery fails.
 
 The command does not place orders. Strategy and order modules should be added
 later behind explicit interfaces once strategy validation exists.

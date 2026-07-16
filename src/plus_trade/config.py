@@ -5,6 +5,8 @@ from enum import StrEnum
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from plus_trade.paths import PROJECT_ROOT
+
 
 class RuntimeEnv(StrEnum):
     LOCAL = "local"
@@ -14,7 +16,7 @@ class RuntimeEnv(StrEnum):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -35,8 +37,6 @@ class Settings(BaseSettings):
     kis_virtual_app_key: SecretStr | None = Field(default=None, alias="KIS_VIRTUAL_APP_KEY")
     kis_virtual_app_secret: SecretStr | None = Field(default=None, alias="KIS_VIRTUAL_APP_SECRET")
 
-    fx_base_currency: str = Field(default="USD", alias="FX_BASE_CURRENCY")
-    fx_quote_currency: str = Field(default="KRW", alias="FX_QUOTE_CURRENCY")
     fx_rate_ttl_seconds: int = Field(default=3600, alias="FX_RATE_TTL_SECONDS", ge=1)
 
     discord_webhook_url: SecretStr | None = Field(default=None, alias="DISCORD_WEBHOOK_URL")
